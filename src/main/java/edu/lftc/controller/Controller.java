@@ -1,60 +1,50 @@
-package com.company.controller;
+package edu.lftc.controller;
 
-import com.company.ReadFile;
-import com.company.domain.*;
+import edu.lftc.util.FileReaderUtil;
+import edu.lftc.domain.*;
+import lombok.Data;
 
 import java.util.*;
 
 /**
  * Created by Melisa AM on 28.12.2016.
  */
+@Data
 public class Controller {
+
     private Grammar grammar;
-    private String fileName;
-    private ReadFile fileReader;
+    private FileReaderUtil fileReader;
 
     public Controller(String fileName) {
-        this.fileName = fileName;
-        fileReader = new ReadFile(this.fileName);
+        fileReader = new FileReaderUtil(fileName);
     }
 
+    /**
+     * Read grammar from file
+     */
     public void readGrammarFromFile() {
         grammar = fileReader.readGrammar();
         System.out.println(grammar);
     }
 
-    public Grammar getGrammar() {
-        return grammar;
-    }
-
-    public void setGrammar(Grammar grammar) {
-        this.grammar = grammar;
-    }
-
-    public Grammar enrichGrammar(Grammar grammar) {
-        Grammar grammar1 = new Grammar(grammar.getN(), grammar.getE(), grammar.getP(), grammar.getS());
-        Set<Nonterminal> n = grammar.getN();
-        n.add(new Nonterminal("SS"));
-        grammar1.setN(n);
-        List<Production> p = grammar.getP();
-        List<ISymbol> alt = new ArrayList<>();
-        alt.add(grammar.getS());
-        p.add(new Production(new Nonterminal("SS"), alt));
-        grammar1.setP(p);
-        return grammar1;
-    }
-
+    /**
+     * Compute the canonical collection of states for grammar, first step in LR(0) parsing
+     *
+     * @param grammar grammar to parse
+     * @return list of States representing the canonical collection of states
+     */
     public List<State> getStates(Grammar grammar) {
         List<State> states = new ArrayList<>();
         List<State> statesUsed = new ArrayList<>();
         Grammar enriched = enrichGrammar(grammar);
-        List<ISymbol> sym = new ArrayList<>();
-        sym.add(enriched.getS());
+
+        List<GrammarSymbol> sym = new ArrayList<>();
+        sym.add(enriched.getStartingSymbol());
         Item it = new Item("SS", sym);
         State first = closure(it, enriched);
         states.add(first);
-        List<ISymbol> symbols = grammar.getNE();
-        List<State> toCheck = new ArrayList<>();
+        List<GrammarSymbol> symbols = grammar.getListOfGrammarSymbols();
+        List<State> toCheck;
 
         boolean modified = true;
         while (modified) {
@@ -62,45 +52,66 @@ public class Controller {
             statesUsed = addUp(toCheck, statesUsed);
             modified = false;
             for (State s : toCheck) {
-                for (ISymbol symbol : symbols) {
-                    State state = goTo(s,symbol);
+                for (GrammarSymbol symbol : symbols) {
+                    State state = goTo(s, symbol);
                     if (state != null) {
-                        if (!(existsState(states, state))) {
+                        if (!(stateExists(states, state))) {
                             states.add(state);
-                            System.out.println("~~~~~~~~~~~~~");
-                            System.out.println(states);
                             modified = true;
                         }
                     }
                 }
             }
         }
-        System.out.println(states);
+        printStateList(states);
         return states;
     }
 
-    public List<State> addUp(List<State> st1, List<State> st2) {
+    private void printStateList(List<State> states) {
+        states.forEach(System.out::println);
+    }
+
+    /**
+     * Add the new starting symbol S' which has only one production, the initial starting of grammar
+     *
+     * @param grammar grammar to enrich
+     * @return new enriched grammar
+     */
+    private Grammar enrichGrammar(Grammar grammar) {
+        Grammar enrichedGrammar = new Grammar(grammar.getNonterminals(), grammar.getTerminals(), grammar.getProductions(), grammar.getStartingSymbol());
+        Set<Nonterminal> n = grammar.getNonterminals();
+        n.add(new Nonterminal("SS"));
+        enrichedGrammar.setNonterminals(n);
+        List<Production> p = grammar.getProductions();
+        List<GrammarSymbol> alt = new ArrayList<>();
+        alt.add(grammar.getStartingSymbol());
+        p.add(new Production(new Nonterminal("SS"), alt));
+        enrichedGrammar.setProductions(p);
+        return enrichedGrammar;
+    }
+
+    private List<State> addUp(List<State> st1, List<State> st2) {
         for (State s : st1) {
             st2.add(s);
         }
         return st2;
     }
 
-    public List<State> cloneStatesDifferent(List<State> states, List<State> toCheck) {
+    private List<State> cloneStatesDifferent(List<State> states, List<State> toCheck) {
         List<State> clone = new ArrayList<>();
         for (State s : states) {
-            if (!(existsState(toCheck, s))) {
+            if (!(stateExists(toCheck, s))) {
                 clone.add(new State(s));
             }
         }
         return clone;
     }
 
-    public boolean existsState(List<State> states, State toCheck) {
+    private boolean stateExists(List<State> states, State toCheck) {
         for (State state : states) {
             int count = 0;
             for (Item it : toCheck.getProductions()) {
-                if (state.existsItem(it)) {
+                if (state.itemExists(it)) {
                     count++;
                 }
             }
@@ -111,8 +122,7 @@ public class Controller {
         return false;
     }
 
-    public State goTo(State state, ISymbol symbol) {
-        State s;
+    private State goTo(State state, GrammarSymbol symbol) {
         for (Item item : state.getProductions()) {
             if (!(item.getStopPosition() == item.getRightSide().size())) {
                 if (symbol instanceof Nonterminal) {
@@ -120,10 +130,7 @@ public class Controller {
                     if (item.getCurrentPosition() instanceof Nonterminal) {
                         Nonterminal current = (Nonterminal) item.getCurrentPosition();
                         if (n.getValue().equals(current.getValue())) {
-                            Item it = new Item(item.getLeftSide(), item.getRightSide());
-                            it.setStopPosition(item.getStopPosition() + 1);
-                            s = closure(it, enrichGrammar(grammar));
-                            return s;
+                            return getNewItem(item);
                         }
                     }
                 } else {
@@ -131,10 +138,7 @@ public class Controller {
                     if (item.getCurrentPosition() instanceof Terminal) {
                         Terminal current = (Terminal) item.getCurrentPosition();
                         if (e.getValue().equals(current.getValue())) {
-                            Item it = new Item(item.getLeftSide(), item.getRightSide());
-                            it.setStopPosition(item.getStopPosition() + 1);
-                            s = closure(it, enrichGrammar(grammar));
-                            return s;
+                            return getNewItem(item);
                         }
                     }
                 }
@@ -143,9 +147,15 @@ public class Controller {
         return null;
     }
 
-    public State closure(Item item, Grammar grammar) {
+    private State getNewItem(Item item) {
+        Item it = new Item(item.getLeftSide(), item.getRightSide());
+        it.setStopPosition(item.getStopPosition() + 1);
+        return closure(it, enrichGrammar(grammar));
+    }
+
+    private State closure(Item item, Grammar grammar) {
         State c = new State(new ArrayList<>());
-        c.addToState(item);
+        c.addItem(item);
         boolean modified = true;
         while (modified) {
             modified = false;
@@ -154,13 +164,13 @@ public class Controller {
             }
             for (int i = 0; i < c.getProductions().size(); i++) {
                 Item it = c.getProductions().get(i);
-                ISymbol current = it.getCurrentPosition();
+                GrammarSymbol current = it.getCurrentPosition();
                 if (current instanceof Nonterminal) {
-                    for (Production p : grammar.getP()) {
+                    for (Production p : grammar.getProductions()) {
                         if (p.getLeftHandSide().getValue().equals(((Nonterminal) current).getValue())) {
                             Item toAdd = new Item(p.getLeftHandSide().getValue(), p.getRightHandSide());
-                            if (!(c.existsItem(toAdd))) {
-                                c.addToState(toAdd);
+                            if (!(c.itemExists(toAdd))) {
+                                c.addItem(toAdd);
                                 modified = true;
                             }
                         }
@@ -168,26 +178,17 @@ public class Controller {
                 }
             }
         }
-//        System.out.println(c);
         return c;
     }
 
-    public boolean isInN(String val, Set<Nonterminal> N) {
-        for (Nonterminal n : N) {
-            if (n.getValue().equals(val)) {
-                return true;
-            }
-        }
-        return false;
+    public boolean isInNonterminals(String val, Set<Nonterminal> nonterminals) {
+        return nonterminals.stream()
+                .anyMatch(v -> v.getValue().equals(val));
     }
 
-    public boolean isInE(String val, Set<Terminal> E) {
-        for (Terminal e : E) {
-            if (e.getValue().equals(val)) {
-                return true;
-            }
-        }
-        return false;
+    public boolean isIntTerminals(String val, Set<Terminal> terminals) {
+        return terminals.stream()
+                .anyMatch(v -> v.getValue().equals(val));
     }
 
 }

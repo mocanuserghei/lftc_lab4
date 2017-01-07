@@ -1,6 +1,6 @@
-package com.company;
+package edu.lftc.util;
 
-import com.company.domain.*;
+import edu.lftc.domain.*;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -14,16 +14,28 @@ import java.util.Set;
 /**
  * Created by Melisa AM on 12.11.2016.
  */
-public class ReadFile {
-    String fileName;
-    Integer stage;
+public class FileReaderUtil {
 
-    public ReadFile(String fileName) {
+    private String fileName;
+    private Integer stage;
+
+    public FileReaderUtil(String fileName) {
         this.fileName = fileName;
         stage = 1;
     }
 
-    public BufferedReader getBuffer() {
+    public Grammar readGrammar() {
+        BufferedReader br = getBuffer();
+
+        Set<Nonterminal> nonterminals = getNonterminals(br);
+        Set<Terminal> terminals = getTerminals(br);
+        List<Production> productions = processProductionStrings(getProductionsAsStrings(br), nonterminals, terminals);
+        Nonterminal startingSymbol = getStartingSymbol(br);
+
+        return new Grammar(nonterminals, terminals, productions, startingSymbol);
+    }
+
+    private BufferedReader getBuffer() {
         BufferedReader br = null;
         stage = 1;
         try {
@@ -34,59 +46,49 @@ public class ReadFile {
         return br;
     }
 
-    public Grammar readGrammar() {
-        BufferedReader br = getBuffer();
-        Set<Nonterminal> N = getN(br);
-        Set<Terminal> E = getE(br);
-        List<String> PtoProcess = getP(br);
-        List<Production> P = processProductionStrings(PtoProcess, N, E);
-        Nonterminal S = getS(br);
-        return new Grammar(N, E, P, S);
-    }
-
-    public List<Production> processProductionStrings(List<String> toProcess, Set<Nonterminal> N, Set<Terminal> E) {
-        List<Production> P = new ArrayList<>();
-        for (String toProces : toProcess) {
+    /**
+     * Read and split the productions, building the list of productions form a string line
+     *
+     * @param stringsToParse strings to process
+     * @param nonterminals   list of nonterminals
+     * @param terminals      list of terminals
+     * @return list of productions representing all productions from a string line
+     */
+    private List<Production> processProductionStrings(List<String> stringsToParse, Set<Nonterminal> nonterminals, Set<Terminal> terminals) {
+        List<Production> productions = new ArrayList<>();
+        for (String toProces : stringsToParse) {
             String[] leftRight = toProces.split("->");
             Nonterminal nonterminal = new Nonterminal(leftRight[0]);
             String[] prods = leftRight[1].split("\\|");
             for (String prod : prods) {
-                List<ISymbol> symbols = new ArrayList<>();
+                List<GrammarSymbol> symbols = new ArrayList<>();
                 String[] symbolsString = prod.split(" ");
                 for (String aSymbolsString : symbolsString) {
-                    if (isInN(aSymbolsString, N)) {
+                    if (isInNonterminals(aSymbolsString, nonterminals)) {
                         symbols.add(new Nonterminal(aSymbolsString));
                     } else {
-                        if (isInE(aSymbolsString, E)) {
+                        if (isInTerminals(aSymbolsString, terminals)) {
                             symbols.add(new Terminal(aSymbolsString));
                         }
                     }
                 }
-                P.add(new Production(nonterminal, symbols));
+                productions.add(new Production(nonterminal, symbols));
             }
         }
-        return P;
+        return productions;
     }
 
-    public boolean isInN(String val, Set<Nonterminal> N) {
-        for (Nonterminal n : N) {
-           if (n.getValue().equals(val)) {
-               return true;
-           }
-        }
-        return false;
+    private boolean isInNonterminals(String val, Set<Nonterminal> nonterminals) {
+        return nonterminals.stream()
+                .anyMatch(v -> v.getValue().equals(val));
     }
 
-    public boolean isInE(String val, Set<Terminal> E) {
-        for (Terminal e : E) {
-            if (e.getValue().equals(val)) {
-                return true;
-            }
-        }
-        return false;
+    private boolean isInTerminals(String val, Set<Terminal> terminals) {
+        return terminals.stream()
+                .anyMatch(v -> v.getValue().equals(val));
     }
 
-    public Set<Nonterminal> getN(BufferedReader br) {
+    private Set<Nonterminal> getNonterminals(BufferedReader br) {
         Set<Nonterminal> N = new HashSet<>();
         if (stage != 1) {
             try {
@@ -111,7 +113,7 @@ public class ReadFile {
         return N;
     }
 
-    public Set<Terminal> getE(BufferedReader br) {
+    private Set<Terminal> getTerminals(BufferedReader br) {
         Set<Terminal> E = new HashSet<>();
         if (stage != 2) {
             try {
@@ -120,7 +122,7 @@ public class ReadFile {
                 e.printStackTrace();
             }
             br = getBuffer();
-            getN(br);
+            getNonterminals(br);
         }
         try {
             String line = br.readLine();
@@ -136,7 +138,7 @@ public class ReadFile {
         return E;
     }
 
-    public List<String> getP(BufferedReader br) {
+    private List<String> getProductionsAsStrings(BufferedReader br) {
         if (stage != 3) {
             try {
                 br.close();
@@ -144,8 +146,8 @@ public class ReadFile {
                 e.printStackTrace();
             }
             br = getBuffer();
-            getN(br);
-            getE(br);
+            getNonterminals(br);
+            getTerminals(br);
         }
         try {
             Integer number = Integer.parseInt(br.readLine());
@@ -163,7 +165,7 @@ public class ReadFile {
         return new ArrayList<>();
     }
 
-    public Nonterminal getS(BufferedReader br) {
+    private Nonterminal getStartingSymbol(BufferedReader br) {
         Nonterminal nonterminal = null;
         if (stage != 4) {
             try {
@@ -172,9 +174,9 @@ public class ReadFile {
                 e.printStackTrace();
             }
             br = getBuffer();
-            getN(br);
-            getE(br);
-            getP(br);
+            getNonterminals(br);
+            getTerminals(br);
+            getProductionsAsStrings(br);
         }
         try {
             String line = br.readLine();
@@ -186,14 +188,6 @@ public class ReadFile {
             e.printStackTrace();
         }
         return nonterminal;
-    }
-
-    public String getFileName() {
-        return fileName;
-    }
-
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
     }
 
 }
