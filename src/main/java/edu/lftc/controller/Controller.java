@@ -27,6 +27,45 @@ public class Controller {
         System.out.println(grammar);
     }
 
+    public Map<Pair<State, ISymbol>, State> getStatesDictionary(Grammar grammar) {
+        Map<Pair<State, ISymbol>, State> statesMap = new LinkedHashMap<>();
+        List<State> states = new ArrayList<>();
+        List<State> statesUsed = new ArrayList<>();
+        Grammar enriched = enrichGrammar(grammar);
+        List<ISymbol> sym = new ArrayList<>();
+        sym.add(enriched.getS());
+        Item it = new Item("SS", sym);
+        State first = closure(it, enriched);
+        statesMap.put(new Pair<>(new State(new ArrayList<Item>()), grammar.getS()), first);
+        states.add(first);
+        List<ISymbol> symbols = grammar.getNE();
+        List<State> toCheck = new ArrayList<>();
+
+        boolean modified = true;
+        while (modified) {
+            toCheck = cloneStatesDifferent(states, statesUsed);
+            statesUsed = addUp(toCheck, statesUsed);
+            modified = false;
+            for (State s : toCheck) {
+                for (ISymbol symbol : symbols) {
+                    State state = goTo(s,symbol);
+                    if (state != null) {
+                        if (!(existsState(states, state))) {
+                            statesMap.put(new Pair<>(s,symbol), state);
+                            states.add(state);
+                            System.out.println("~~~~~~~~~~~~~");
+                            System.out.println(states);
+                            modified = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        System.out.println(statesMap);
+        return statesMap;
+    }
+
     /**
      * Compute the canonical collection of states for grammar, first step in LR(0) parsing
      *

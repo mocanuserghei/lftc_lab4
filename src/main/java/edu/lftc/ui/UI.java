@@ -32,7 +32,7 @@ public class UI {
                     controller.readGrammarFromFile();
                     break;
                 case "2":
-                    controller.getStates(controller.getGrammar());
+                    controller.getStatesDictionary(controller.getGrammar());
                 default:
                     System.exit(0);
             }
