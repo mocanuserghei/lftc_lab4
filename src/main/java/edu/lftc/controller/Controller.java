@@ -2,6 +2,7 @@ package edu.lftc.controller;
 
 import edu.lftc.util.FileReaderUtil;
 import edu.lftc.domain.*;
+import javafx.util.Pair;
 import lombok.Data;
 
 import java.util.*;
@@ -27,34 +28,32 @@ public class Controller {
         System.out.println(grammar);
     }
 
-    public Map<Pair<State, ISymbol>, State> getStatesDictionary(Grammar grammar) {
-        Map<Pair<State, ISymbol>, State> statesMap = new LinkedHashMap<>();
+    public Map<Pair<State, GrammarSymbol>, State> getStatesDictionary(Grammar grammar) {
+        Map<Pair<State, GrammarSymbol>, State> statesTransitionMap = new LinkedHashMap<>();
         List<State> states = new ArrayList<>();
         List<State> statesUsed = new ArrayList<>();
         Grammar enriched = enrichGrammar(grammar);
-        List<ISymbol> sym = new ArrayList<>();
-        sym.add(enriched.getS());
+        List<GrammarSymbol> sym = new ArrayList<>();
+        sym.add(enriched.getStartingSymbol());
         Item it = new Item("SS", sym);
         State first = closure(it, enriched);
-        statesMap.put(new Pair<>(new State(new ArrayList<Item>()), grammar.getS()), first);
+        statesTransitionMap.put(new Pair<>(new State(new ArrayList<>()), grammar.getStartingSymbol()), first);
         states.add(first);
-        List<ISymbol> symbols = grammar.getNE();
-        List<State> toCheck = new ArrayList<>();
+        List<GrammarSymbol> symbols = grammar.getListOfGrammarSymbols();
+        List<State> statesToCheck;
 
         boolean modified = true;
         while (modified) {
-            toCheck = cloneStatesDifferent(states, statesUsed);
-            statesUsed = addUp(toCheck, statesUsed);
+            statesToCheck = cloneStatesDifferent(states, statesUsed);
+            statesUsed = addUp(statesToCheck, statesUsed);
             modified = false;
-            for (State s : toCheck) {
-                for (ISymbol symbol : symbols) {
-                    State state = goTo(s,symbol);
+            for (State stateToCheck : statesToCheck) {
+                for (GrammarSymbol symbol : symbols) {
+                    State state = goTo(stateToCheck, symbol);
                     if (state != null) {
-                        if (!(existsState(states, state))) {
-                            statesMap.put(new Pair<>(s,symbol), state);
+                        if (!(stateExists(states, state))) {
+                            statesTransitionMap.put(new Pair<>(stateToCheck, symbol), state);
                             states.add(state);
-                            System.out.println("~~~~~~~~~~~~~");
-                            System.out.println(states);
                             modified = true;
                         }
                     }
@@ -62,8 +61,14 @@ public class Controller {
             }
         }
 
-        System.out.println(statesMap);
-        return statesMap;
+        for (Map.Entry<Pair<State, GrammarSymbol>, State> pairStateEntry : statesTransitionMap.entrySet()) {
+            System.out.println(pairStateEntry.getKey().getKey());
+            System.out.println(pairStateEntry.getKey().getValue());
+            System.out.println(pairStateEntry.getValue());
+            System.out.println("~~~~");
+        }
+
+        return statesTransitionMap;
     }
 
     /**
