@@ -1,11 +1,14 @@
 package edu.lftc.controller;
 
-import edu.lftc.util.FileReaderUtil;
 import edu.lftc.domain.*;
+import edu.lftc.util.Actions;
+import edu.lftc.util.FileReaderUtil;
 import javafx.util.Pair;
 import lombok.Data;
 
 import java.util.*;
+
+import static edu.lftc.controller.LRParseTable.*;
 
 /**
  * Created by Melisa AM on 28.12.2016.
@@ -15,6 +18,11 @@ public class Controller {
 
     private Grammar grammar;
     private FileReaderUtil fileReader;
+    private Map<Integer, State> indexStateMap = new HashMap<>();
+    private Map<State, Integer> stateIndexMap = new HashMap<>();
+
+    private Map<Integer, Production> indexProductionMap = new HashMap<>();
+    private Map<Production, Integer> productionIndexMap = new HashMap<>();
 
     public Controller(String fileName) {
         fileReader = new FileReaderUtil(fileName);
@@ -29,7 +37,7 @@ public class Controller {
     }
 
     public Map<Pair<State, GrammarSymbol>, State> getStatesDictionary(Grammar grammar) {
-        Map<Pair<State, GrammarSymbol>, State> statesTransitionMap = new LinkedHashMap<>();
+        Map<Pair<State, GrammarSymbol>, State> stateTransitionsMap = new LinkedHashMap<>();
         List<State> states = new ArrayList<>();
         List<State> statesUsed = new ArrayList<>();
         Grammar enriched = enrichGrammar(grammar);
@@ -37,7 +45,6 @@ public class Controller {
         sym.add(enriched.getStartingSymbol());
         Item it = new Item("SS", sym);
         State first = closure(it, enriched);
-        statesTransitionMap.put(new Pair<>(new State(new ArrayList<>()), grammar.getStartingSymbol()), first);
         states.add(first);
         List<GrammarSymbol> symbols = grammar.getListOfGrammarSymbols();
         List<State> statesToCheck;
@@ -52,23 +59,78 @@ public class Controller {
                     State state = goTo(stateToCheck, symbol);
                     if (state != null) {
                         if (!(stateExists(states, state))) {
-                            statesTransitionMap.put(new Pair<>(stateToCheck, symbol), state);
                             states.add(state);
                             modified = true;
                         }
+                        stateTransitionsMap.put(new Pair<>(stateToCheck, symbol), state);
                     }
                 }
             }
         }
 
-        for (Map.Entry<Pair<State, GrammarSymbol>, State> pairStateEntry : statesTransitionMap.entrySet()) {
-            System.out.println(pairStateEntry.getKey().getKey());
-            System.out.println(pairStateEntry.getKey().getValue());
-            System.out.println(pairStateEntry.getValue());
-            System.out.println("~~~~");
+        //give index for states, keep to maps to easy access elements by index and states
+        for (int i = 0; i < states.size(); i++) {
+            indexStateMap.put(i, states.get(i));
+            stateIndexMap.put(states.get(i), i);
         }
 
-        return statesTransitionMap;
+        //give index to initial list of productions
+        //need to filter productions to contain unique values due to some bug while building the states
+        List<Production> productions = new ArrayList<>(new HashSet<>(grammar.getProductions()));
+        for (int i = 0; i < productions.size(); i++) {
+            indexProductionMap.put(i, productions.get(i));
+            productionIndexMap.put(productions.get(i), i);
+        }
+
+        return stateTransitionsMap;
+    }
+
+    public LRParseTable buildLRParseTable(Grammar grammar) {
+        Map<Pair<State, GrammarSymbol>, State> stateTransitionsMapping = getStatesDictionary(grammar);
+
+        LRParseTable parseTable = new LRParseTable();
+
+        for (Map.Entry<Pair<State, GrammarSymbol>, State> pairStateEntry : stateTransitionsMapping.entrySet()) {
+            System.out.println(pairStateEntry.getKey());
+            LRParseTableEntry parseTableEntry = new LRParseTableEntry();
+
+            int initialStateIndex = stateIndexMap.get(pairStateEntry.getKey().getKey());
+            GrammarSymbol symbolOfTransition = pairStateEntry.getKey().getValue();
+            int transitionStateIndex = stateIndexMap.get(pairStateEntry.getValue());
+
+            List<Item> productions = pairStateEntry.getValue().getProductions();
+
+            if (productions.size() == 1 &&
+                    productions.get(0).getStopPosition() == 1 &&
+                    productions.get(0).getRightSide().get(0).equals(grammar.getStartingSymbol())) {
+                parseTableEntry.setAction(Actions.ACCEPT);
+                parseTableEntry.setInitialStateIndex(transitionStateIndex);
+                parseTable.addLineToTable(parseTableEntry);
+                continue;
+            }
+
+            boolean reduceFlag = true;
+            for (Item item : productions) {
+                if (item.getStopPosition() != item.getRightSide().size()) {
+                    // TODO: 1/8/2017 need to take the index from productions
+                    reduceFlag = false;
+                    break;
+                }
+            }
+            if (reduceFlag) {
+                // TODO: 1/8/2017 perform reduce logic, find the productions from initial production list
+                parseTableEntry.setAction(Actions.REDUCE);
+                parseTableEntry.setInitialStateIndex(transitionStateIndex);
+                parseTable.addLineToTable(parseTableEntry);
+
+            }
+            parseTableEntry.setInitialStateIndex(initialStateIndex);
+            parseTableEntry.setAction(Actions.SHIFT);
+            parseTableEntry.addTransition(new Pair<>(symbolOfTransition, transitionStateIndex));
+            parseTable.addLineToTable(parseTableEntry);
+        }
+
+        return parseTable;
     }
 
     /**
