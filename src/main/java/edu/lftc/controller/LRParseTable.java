@@ -22,9 +22,14 @@ import java.util.*;
 public class LRParseTable {
 
     private List<LRParseTableEntry> entryList = new ArrayList<>();
+    private Set<Integer> addedStatePos = new HashSet<>();
 
     public void addLineToTable(LRParseTableEntry tableEntry) {
         entryList.add(tableEntry);
+    }
+
+    public void addStatePos (Integer pos){
+        addedStatePos.add(pos);
     }
 
     @Data

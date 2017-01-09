@@ -91,43 +91,52 @@ public class Controller {
         LRParseTable parseTable = new LRParseTable();
 
         for (Map.Entry<Pair<State, GrammarSymbol>, State> pairStateEntry : stateTransitionsMapping.entrySet()) {
-            System.out.println(pairStateEntry.getKey());
             LRParseTableEntry parseTableEntry = new LRParseTableEntry();
 
             int initialStateIndex = stateIndexMap.get(pairStateEntry.getKey().getKey());
             GrammarSymbol symbolOfTransition = pairStateEntry.getKey().getValue();
             int transitionStateIndex = stateIndexMap.get(pairStateEntry.getValue());
 
-            List<Item> productions = pairStateEntry.getValue().getProductions();
-
-            if (productions.size() == 1 &&
-                    productions.get(0).getStopPosition() == 1 &&
-                    productions.get(0).getRightSide().get(0).equals(grammar.getStartingSymbol())) {
-                parseTableEntry.setAction(Actions.ACCEPT);
-                parseTableEntry.setInitialStateIndex(transitionStateIndex);
-                parseTable.addLineToTable(parseTableEntry);
-                continue;
-            }
-
-            boolean reduceFlag = true;
-            for (Item item : productions) {
-                if (item.getStopPosition() != item.getRightSide().size()) {
-                    // TODO: 1/8/2017 need to take the index from productions
-                    reduceFlag = false;
-                    break;
-                }
-            }
-            if (reduceFlag) {
-                // TODO: 1/8/2017 perform reduce logic, find the productions from initial production list
-                parseTableEntry.setAction(Actions.REDUCE);
-                parseTableEntry.setInitialStateIndex(transitionStateIndex);
-                parseTable.addLineToTable(parseTableEntry);
-
-            }
             parseTableEntry.setInitialStateIndex(initialStateIndex);
             parseTableEntry.setAction(Actions.SHIFT);
             parseTableEntry.addTransition(new Pair<>(symbolOfTransition, transitionStateIndex));
             parseTable.addLineToTable(parseTableEntry);
+            parseTable.addStatePos(initialStateIndex);
+        }
+
+        for (State state : indexStateMap.values()) {
+            int index = stateIndexMap.get(state);
+            if (!parseTable.getAddedStatePos().contains(index)) {
+                List<Item> productions = state.getProductions();
+                LRParseTableEntry parseTableEntry = new LRParseTableEntry();
+
+                if (productions.size() != 1) {
+                    throw new IllegalStateException("exceptions");
+                }
+
+                if (productions.size() == 1 &&
+                        productions.get(0).getStopPosition() == 1 &&
+                        productions.get(0).getRightSide().get(0).equals(grammar.getStartingSymbol())) {
+                    parseTableEntry.setAction(Actions.ACCEPT);
+                    parseTableEntry.setInitialStateIndex(index);
+                    parseTable.addLineToTable(parseTableEntry);
+                    continue;
+                }
+
+                if (productions.get(0).getStopPosition() == productions.get(0).getRightSide().size()) {
+                    // TODO: 1/8/2017 perform reduce logic, find the productions from initial production list
+                    parseTableEntry.setAction(Actions.REDUCE);
+                    parseTableEntry.setInitialStateIndex(index);
+                    Item item = productions.get(0);
+                    String leftSide = item.getLeftSide();
+
+                    Production production = new Production();
+                    production.setLeftHandSide(new Nonterminal(leftSide));
+                    production.setRightHandSide(item.getRightSide());
+                    parseTableEntry.setReduceIndex(productionIndexMap.get(production));
+                    parseTable.addLineToTable(parseTableEntry);
+                }
+            }
         }
 
         return parseTable;
