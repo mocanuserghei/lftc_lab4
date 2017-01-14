@@ -3,6 +3,7 @@ package edu.lftc.ui;
 import edu.lftc.controller.Controller;
 import edu.lftc.controller.LRParseTable;
 
+import java.util.Queue;
 import java.util.Scanner;
 
 /**
@@ -27,7 +28,9 @@ public class UI {
     public void run() {
         controller.readGrammarFromFile();
         LRParseTable lrParseTable = controller.buildLRParseTable(controller.getGrammar());
-        System.out.println(lrParseTable);
+//        System.out.println(lrParseTable);
+        Queue<Integer> integers = controller.checkGrammar(controller.getGrammar());
+        System.out.println(integers);
 //        String opt;
 //        while (true) {
 //            menu();

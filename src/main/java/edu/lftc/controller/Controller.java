@@ -1,5 +1,6 @@
 package edu.lftc.controller;
 
+import edu.lftc.Main;
 import edu.lftc.domain.*;
 import edu.lftc.util.Actions;
 import edu.lftc.util.FileReaderUtil;
@@ -7,6 +8,9 @@ import javafx.util.Pair;
 import lombok.Data;
 
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 import static edu.lftc.controller.LRParseTable.*;
 
@@ -36,14 +40,14 @@ public class Controller {
         System.out.println(grammar);
     }
 
-    public Map<Pair<State, GrammarSymbol>, State> getStatesDictionary(Grammar grammar) {
+    private Map<Pair<State, GrammarSymbol>, State> getStatesDictionary(Grammar grammar) {
         Map<Pair<State, GrammarSymbol>, State> stateTransitionsMap = new LinkedHashMap<>();
         List<State> states = new ArrayList<>();
         List<State> statesUsed = new ArrayList<>();
         Grammar enriched = enrichGrammar(grammar);
         List<GrammarSymbol> sym = new ArrayList<>();
         sym.add(enriched.getStartingSymbol());
-        Item it = new Item("SS", sym);
+        Item it = new Item("S'", sym);
         State first = closure(it, enriched);
         states.add(first);
         List<GrammarSymbol> symbols = grammar.getListOfGrammarSymbols();
@@ -85,6 +89,68 @@ public class Controller {
         return stateTransitionsMap;
     }
 
+    public Queue<Integer> checkGrammar(Grammar grammar) {
+        Stack<Pair<String, Integer>> workingStack = new Stack<>();
+        workingStack.push(new Pair<>("$", 0));
+
+        Queue<Integer> finalOutput = new PriorityQueue<>();
+
+        Queue<String> inputSeq = splitLineByEmptySpace(Main.SEQUENCE_TO_CHECK);
+        LRParseTable parseTable = buildLRParseTable(grammar);
+        List<LRParseTableEntry> entryList = parseTable.getEntryList();
+
+
+        while (inputSeq.peek() != null) {
+            String elementToCheck = inputSeq.poll();
+
+            for (LRParseTableEntry lrParseTableEntry : entryList) {
+
+                Pair<String, Integer> peek = workingStack.peek();
+
+                if (lrParseTableEntry.getInitialStateIndex() == peek.getValue()) {
+                    Actions action = lrParseTableEntry.getAction();
+                    switch (action) {
+                        case ACCEPT:
+                            return finalOutput;
+                        case SHIFT:
+                            performShiftOperation(workingStack, elementToCheck, lrParseTableEntry);
+                            break;
+                        case REDUCE:
+                            break;
+                        case ERROR:
+                            throw new IllegalStateException("Some problems occur during LR (0) analysis");
+                    }
+                }
+            }
+        }
+        System.out.println(workingStack);
+        return finalOutput;
+    }
+
+    private void performShiftOperation(Stack<Pair<String, Integer>> workingStack, String elementToCheck, LRParseTableEntry parseTableEntry) {
+        for (Pair<GrammarSymbol, Integer> grammarSymbolIntegerPair : parseTableEntry.getTransitionList()) {
+            GrammarSymbol key = grammarSymbolIntegerPair.getKey();
+            if (key instanceof Nonterminal) {
+                if (((Nonterminal) key).getValue().equals(elementToCheck)) {
+                    workingStack.push(new Pair<>(elementToCheck, grammarSymbolIntegerPair.getValue()));
+                    break;
+                }
+            } else {
+                if (((Terminal) key).getValue().equals(elementToCheck)) {
+                    workingStack.push(new Pair<>(elementToCheck, grammarSymbolIntegerPair.getValue()));
+                    break;
+                }
+            }
+        }
+    }
+
+    public Queue<String> splitLineByEmptySpace(String line) {
+        Queue<String> strings = new PriorityQueue<>();
+
+        Collections.addAll(strings, line.split(" "));
+        return strings;
+    }
+
     public LRParseTable buildLRParseTable(Grammar grammar) {
         Map<Pair<State, GrammarSymbol>, State> stateTransitionsMapping = getStatesDictionary(grammar);
 
@@ -97,11 +163,32 @@ public class Controller {
             GrammarSymbol symbolOfTransition = pairStateEntry.getKey().getValue();
             int transitionStateIndex = stateIndexMap.get(pairStateEntry.getValue());
 
+            int mapIndex = -1;
+
+            //check if it already in the list, if yes get it and just add to the list
+            for (int i = 0; i < parseTable.getEntryList().size(); i++) {
+                LRParseTableEntry lrParseTableEntry = parseTable.getEntryList().get(i);
+                if (lrParseTableEntry.getInitialStateIndex() == initialStateIndex) {
+                    mapIndex = i;
+                    break;
+                }
+            }
+
+            parseTable.addStatePos(initialStateIndex);
+
+            if (mapIndex != -1) {
+                LRParseTableEntry lrParseTableEntry = parseTable.getEntryList().get(mapIndex);
+                lrParseTableEntry.addTransition(new Pair<>(symbolOfTransition, transitionStateIndex));
+                continue;
+            }
+
+            //create entry for parse table
             parseTableEntry.setInitialStateIndex(initialStateIndex);
             parseTableEntry.setAction(Actions.SHIFT);
             parseTableEntry.addTransition(new Pair<>(symbolOfTransition, transitionStateIndex));
+
+            //add entry to parse table
             parseTable.addLineToTable(parseTableEntry);
-            parseTable.addStatePos(initialStateIndex);
         }
 
         for (State state : indexStateMap.values()) {
@@ -110,10 +197,12 @@ public class Controller {
                 List<Item> productions = state.getProductions();
                 LRParseTableEntry parseTableEntry = new LRParseTableEntry();
 
+                //exception case
                 if (productions.size() != 1) {
-                    throw new IllegalStateException("exceptions");
+                    throw new IllegalStateException("Grammar not valid for LR(0) parsing");
                 }
 
+                //accept logic
                 if (productions.size() == 1 &&
                         productions.get(0).getStopPosition() == 1 &&
                         productions.get(0).getRightSide().get(0).equals(grammar.getStartingSymbol())) {
@@ -133,7 +222,9 @@ public class Controller {
                     Production production = new Production();
                     production.setLeftHandSide(new Nonterminal(leftSide));
                     production.setRightHandSide(item.getRightSide());
+
                     parseTableEntry.setReduceIndex(productionIndexMap.get(production));
+
                     parseTable.addLineToTable(parseTableEntry);
                 }
             }
@@ -155,7 +246,7 @@ public class Controller {
 
         List<GrammarSymbol> sym = new ArrayList<>();
         sym.add(enriched.getStartingSymbol());
-        Item it = new Item("SS", sym);
+        Item it = new Item("S'", sym);
         State first = closure(it, enriched);
         states.add(first);
         List<GrammarSymbol> symbols = grammar.getListOfGrammarSymbols();
@@ -195,12 +286,12 @@ public class Controller {
     private Grammar enrichGrammar(Grammar grammar) {
         Grammar enrichedGrammar = new Grammar(grammar.getNonterminals(), grammar.getTerminals(), grammar.getProductions(), grammar.getStartingSymbol());
         Set<Nonterminal> n = grammar.getNonterminals();
-        n.add(new Nonterminal("SS"));
+        n.add(new Nonterminal("S'"));
         enrichedGrammar.setNonterminals(n);
         List<Production> p = grammar.getProductions();
         List<GrammarSymbol> alt = new ArrayList<>();
         alt.add(grammar.getStartingSymbol());
-        p.add(new Production(new Nonterminal("SS"), alt));
+        p.add(new Production(new Nonterminal("S'"), alt));
         enrichedGrammar.setProductions(p);
         return enrichedGrammar;
     }
