@@ -3,6 +3,7 @@ package edu.lftc.ui;
 import edu.lftc.controller.Controller;
 import edu.lftc.controller.LRParseTable;
 
+import java.util.List;
 import java.util.Queue;
 import java.util.Scanner;
 
@@ -26,27 +27,24 @@ public class UI {
     }
 
     public void run() {
-        controller.readGrammarFromFile();
-        LRParseTable lrParseTable = controller.buildLRParseTable(controller.getGrammar());
-//        System.out.println(lrParseTable);
-        Queue<Integer> integers = controller.checkGrammar(controller.getGrammar());
-        System.out.println(integers);
-//        String opt;
-//        while (true) {
-//            menu();
-//            opt = scanner.next();
-//            switch (opt) {
-//                case "1":
-//                    controller.readGrammarFromFile();
-//                    break;
-//                case "2":
-//                    controller.getStatesDictionary(controller.getGrammar());
-//                case "3":
-//                    controller.buildLRParseTable(controller.getGrammar());
-//                default:
-//                    System.exit(0);
-//            }
-//        }
+        try {
+            controller.readGrammarFromFile();
+            System.out.println("---------------------------");
+
+            LRParseTable lrParseTable = controller.buildLRParseTable(controller.getGrammar());
+            System.out.println(lrParseTable);
+            System.out.println("---------------------------");
+
+            Queue<Integer> outputStack = controller.checkGrammar(controller.getGrammar());
+            System.out.println(outputStack);
+            System.out.println("---------------------------");
+
+            List<String> representationString = controller.getRepresentation(outputStack);
+            System.out.println(representationString);
+        } catch (IllegalArgumentException e) {
+            System.out.println("SOMETHING WENT WRONG");
+            System.out.println(e.getMessage());
+        }
     }
 
 }

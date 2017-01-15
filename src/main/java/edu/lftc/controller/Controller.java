@@ -89,6 +89,20 @@ public class Controller {
         return stateTransitionsMap;
     }
 
+    public List<String> getRepresentation(Queue<Integer> outputStack) {
+        List<String> derivationString = new ArrayList<>();
+
+        List<Integer> listRepresentation = new ArrayList<>();
+        listRepresentation.addAll(outputStack);
+
+        for (int i = listRepresentation.size() - 1; i >= 0; i--) {
+            Production production = indexProductionMap.get(listRepresentation.get(i));
+            System.out.println(production.getRightHandSide());
+        }
+
+        return derivationString;
+    }
+
     public Queue<Integer> checkGrammar(Grammar grammar) {
         Stack<Pair<String, Integer>> workingStack = new Stack<>();
         workingStack.push(new Pair<>("$", 0));
@@ -99,32 +113,96 @@ public class Controller {
         LRParseTable parseTable = buildLRParseTable(grammar);
         List<LRParseTableEntry> entryList = parseTable.getEntryList();
 
+        performShiftOperationOverLRTable(workingStack, inputSeq, entryList);
 
-        while (inputSeq.peek() != null) {
-            String elementToCheck = inputSeq.poll();
+        //we are at reduce point, the input sequence is empty and we have to parse the working stack elements
+        while (workingStack.size() > 0) {
+            Pair<String, Integer> stringIntegerPair = workingStack.pop();
 
             for (LRParseTableEntry lrParseTableEntry : entryList) {
 
-                Pair<String, Integer> peek = workingStack.peek();
+                if (lrParseTableEntry.getInitialStateIndex() == stringIntegerPair.getValue()) {
+                    switch (lrParseTableEntry.getAction()) {
+                        case ACCEPT:
+                            if (workingStack.size() == 1) {
+                                return finalOutput;
+                            } else {
+                                throw new IllegalStateException("Some problems occur during LR (0) analysis");
+                            }
+                        case REDUCE:
+                            int reduceIndex = lrParseTableEntry.getReduceIndex();
+                            finalOutput.add(reduceIndex);
+                            Production production = indexProductionMap.get(reduceIndex);
 
+                            int size = production.getRightHandSide().size();
+
+                            while (size > 1) {
+                                size--;
+                                workingStack.pop();
+                            }
+
+                            String value = production.getLeftHandSide().getValue();
+                            Integer prevIdx = workingStack.peek().getValue();
+
+                            Pair<GrammarSymbol, Integer> grammarSymbolIntegerPair = getEntryForIdxAndSymbol(entryList, prevIdx, value);
+
+                            if (grammarSymbolIntegerPair == null) {
+                                throw new IllegalStateException("Some problems occur during LR (0) analysis");
+                            }
+
+                            workingStack.push(new Pair<>(value, grammarSymbolIntegerPair.getValue()));
+                            break;
+
+                        default:
+                            throw new IllegalStateException("Some problems occur during LR (0) analysis");
+                    }
+                    break;
+                }
+            }
+        }
+        return finalOutput;
+    }
+
+    private Pair<GrammarSymbol, Integer> getEntryForIdxAndSymbol(List<LRParseTableEntry> entryList, int idx, String valueToFind) {
+        for (LRParseTableEntry lrParseTableEntry : entryList) {
+            if (lrParseTableEntry.getInitialStateIndex() == idx) {
+                for (Pair<GrammarSymbol, Integer> grammarSymbolIntegerPair : lrParseTableEntry.getTransitionList()) {
+                    GrammarSymbol key = grammarSymbolIntegerPair.getKey();
+                    if (key instanceof Nonterminal) {
+                        if (((Nonterminal) key).getValue().equals(valueToFind)) {
+                            return grammarSymbolIntegerPair;
+                        }
+                    } else {
+                        if (((Terminal) key).getValue().equals(valueToFind)) {
+                            return grammarSymbolIntegerPair;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private void performShiftOperationOverLRTable(Stack<Pair<String, Integer>> workingStack, Queue<String> inputSeq, List<LRParseTableEntry> entryList) {
+        while (inputSeq.peek() != null) {
+            String elementToCheck = inputSeq.poll();
+            Pair<String, Integer> peek = workingStack.peek();
+
+            for (LRParseTableEntry lrParseTableEntry : entryList) {
                 if (lrParseTableEntry.getInitialStateIndex() == peek.getValue()) {
                     Actions action = lrParseTableEntry.getAction();
                     switch (action) {
-                        case ACCEPT:
-                            return finalOutput;
                         case SHIFT:
                             performShiftOperation(workingStack, elementToCheck, lrParseTableEntry);
                             break;
-                        case REDUCE:
-                            break;
                         case ERROR:
+                            throw new IllegalStateException("Some problems occur during LR (0) analysis");
+                        default:
                             throw new IllegalStateException("Some problems occur during LR (0) analysis");
                     }
                 }
             }
         }
-        System.out.println(workingStack);
-        return finalOutput;
     }
 
     private void performShiftOperation(Stack<Pair<String, Integer>> workingStack, String elementToCheck, LRParseTableEntry parseTableEntry) {
@@ -385,16 +463,6 @@ public class Controller {
             }
         }
         return c;
-    }
-
-    public boolean isInNonterminals(String val, Set<Nonterminal> nonterminals) {
-        return nonterminals.stream()
-                .anyMatch(v -> v.getValue().equals(val));
-    }
-
-    public boolean isIntTerminals(String val, Set<Terminal> terminals) {
-        return terminals.stream()
-                .anyMatch(v -> v.getValue().equals(val));
     }
 
 }
