@@ -2,6 +2,7 @@ package edu.lftc.ui;
 
 import edu.lftc.controller.Controller;
 import edu.lftc.controller.LRParseTable;
+import edu.lftc.domain.GrammarSymbol;
 
 import java.util.List;
 import java.util.Queue;
@@ -39,7 +40,10 @@ public class UI {
             System.out.println(outputStack);
             System.out.println("---------------------------");
 
-            List<String> representationString = controller.getRepresentation(outputStack);
+            List<List<GrammarSymbol>> representationString = controller.getRepresentation(outputStack);
+            for (List<GrammarSymbol> grammarSymbols : representationString) {
+                System.out.println(grammarSymbols);
+            }
             System.out.println(representationString);
         } catch (IllegalArgumentException e) {
             System.out.println("SOMETHING WENT WRONG");

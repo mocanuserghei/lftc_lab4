@@ -8,9 +8,6 @@ import javafx.util.Pair;
 import lombok.Data;
 
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
 
 import static edu.lftc.controller.LRParseTable.*;
 
@@ -89,17 +86,27 @@ public class Controller {
         return stateTransitionsMap;
     }
 
-    public List<String> getRepresentation(Queue<Integer> outputStack) {
-        List<String> derivationString = new ArrayList<>();
+    public List<List<GrammarSymbol>> getRepresentation(Queue<Integer> outputStack) {
+        List<List<GrammarSymbol>> derivationString = new ArrayList<>();
+        derivationString.add(Collections.singletonList(grammar.getStartingSymbol()));
 
         List<Integer> listRepresentation = new ArrayList<>();
         listRepresentation.addAll(outputStack);
 
         for (int i = listRepresentation.size() - 1; i >= 0; i--) {
-            Production production = indexProductionMap.get(listRepresentation.get(i));
-            System.out.println(production.getRightHandSide());
+            List<GrammarSymbol> toReplace = derivationString.get(derivationString.size() - 1);
+            List<GrammarSymbol> newList = new ArrayList<>();
+            boolean firstNonterminal = true;
+            for (GrammarSymbol symbol : toReplace) {
+                if (symbol instanceof Nonterminal && firstNonterminal) {
+                    firstNonterminal = false;
+                    newList.addAll(indexProductionMap.get(listRepresentation.get(i)).getRightHandSide());
+                } else {
+                    newList.add(symbol);
+                }
+            }
+            derivationString.add(newList);
         }
-
         return derivationString;
     }
 

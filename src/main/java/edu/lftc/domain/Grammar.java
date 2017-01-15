@@ -22,4 +22,11 @@ public class Grammar {
         return symbols;
     }
 
+    public boolean isNonterminal(String value) {
+        if (nonterminals.contains(new Nonterminal(value))) {
+            return true;
+        }
+        return false;
+    }
+
 }
